@@ -1,4 +1,3 @@
-
 from typing import Dict
 import torch
 import numpy as np
@@ -6,24 +5,34 @@ from detectron2.layers import ShapeSpec, cat
 from detectron2.layers.roi_align import ROIAlign
 from detectron2.modeling import ROI_HEADS_REGISTRY
 from detectron2.modeling.poolers import ROIPooler
-from detectron2.modeling.roi_heads.roi_heads import StandardROIHeads, select_foreground_proposals
+from detectron2.modeling.roi_heads.roi_heads import (
+    StandardROIHeads,
+    select_foreground_proposals,
+)
 from nocsrcnn.modeling.roi_heads.nocs_head import (
     build_nocs_head,
     mrcnn_coord_symmetry_loss_graph,
     mrcnn_coord_symmetry_euclidean_distance_graph,
-    mrcnn_coord_bins_symmetry_loss_graph
+    mrcnn_coord_bins_symmetry_loss_graph,
 )
+
+
 def clip_for_proposal(instances, out_hw, scale, ratio):
-    target_mask, target_coords, target_class_ids, target_domain_labels, proposals_boxes \
-            = [], [], [], [], []
+    (
+        target_mask,
+        target_coords,
+        target_class_ids,
+        target_domain_labels,
+        proposals_boxes,
+    ) = ([], [], [], [], [])
     for image in instances:
-        '''
+        """
         image.gt_masks
         image.gt_coords
         image.class_ids
         image.gt_domain_label
         image.proposals_boxes
-        '''
+        """
         if len(image) == 0:
             continue
 
@@ -41,18 +50,29 @@ def clip_for_proposal(instances, out_hw, scale, ratio):
         bbox = image.proposal_boxes.tensor
         batch_inds = torch.arange(len(bbox)).to(dtype=bbox.dtype)[:, None]
         rois = torch.cat([batch_inds, bbox], dim=1)  # Nx5
-        coord_per_image = coord_per_image.permute(0,3,1,2)
-        coord_per_image = ROIAlign((out_hw, out_hw), 1.0, 0, aligned=True).forward(coord_per_image, rois)
-        coord_per_image = coord_per_image.permute(0,2,3,1)
+        coord_per_image = coord_per_image.permute(0, 3, 1, 2)
+        coord_per_image = ROIAlign((out_hw, out_hw), 1.0, 0, aligned=True).forward(
+            coord_per_image, rois
+        )
+        coord_per_image = coord_per_image.permute(0, 2, 3, 1)
 
         target_coords.append(coord_per_image)
 
-    return target_mask, target_coords, target_class_ids, target_domain_labels, proposals_boxes    
+    return (
+        target_mask,
+        target_coords,
+        target_class_ids,
+        target_domain_labels,
+        proposals_boxes,
+    )
+
+
 @ROI_HEADS_REGISTRY.register()
 class NOCSRCNNROIHeads(StandardROIHeads):
     """
     The ROI specific heads for NOCS R-CNN
     """
+
     def __init__(self, cfg, input_shape: Dict[str, ShapeSpec]):
         super().__init__(cfg, input_shape)
         self._init_nocs_head(cfg, input_shape)
@@ -82,27 +102,39 @@ class NOCSRCNNROIHeads(StandardROIHeads):
         )
         self.nocs_head_x = build_nocs_head(
             cfg,
-            ShapeSpec(channels=in_channels, height=nocs_pooler_resolution, width=nocs_pooler_resolution),
+            ShapeSpec(
+                channels=in_channels,
+                height=nocs_pooler_resolution,
+                width=nocs_pooler_resolution,
+            ),
             "coord_x",
         )
         self.nocs_head_y = build_nocs_head(
             cfg,
-            ShapeSpec(channels=in_channels, height=nocs_pooler_resolution, width=nocs_pooler_resolution),
+            ShapeSpec(
+                channels=in_channels,
+                height=nocs_pooler_resolution,
+                width=nocs_pooler_resolution,
+            ),
             "coord_y",
         )
         self.nocs_head_z = build_nocs_head(
             cfg,
-            ShapeSpec(channels=in_channels, height=nocs_pooler_resolution, width=nocs_pooler_resolution),
+            ShapeSpec(
+                channels=in_channels,
+                height=nocs_pooler_resolution,
+                width=nocs_pooler_resolution,
+            ),
             "coord_z",
         )
-    
+
     def forward(self, images, features, proposals, targets=None):
         """
         See :class:`ROIHeads.forward`.
         """
         # if self._vis:
         #    self._misc["images"] = images
-        
+
         del images
         if self.training:
             # print(proposals)
@@ -120,53 +152,69 @@ class NOCSRCNNROIHeads(StandardROIHeads):
             # applied to the top scoring box detections.
             # pred_instances = self.forward_with_given_boxes(features, pred_instances)
             return pred_instances, {}
-    
 
     def forward_with_given_boxes(self, features, instances):
         assert not self.training
-        assert instances[0].has("pred_boxes") and instances[0].has("pred_classes") and instances[0].has("pred_nocs")
+        assert (
+            instances[0].has("pred_boxes")
+            and instances[0].has("pred_classes")
+            and instances[0].has("pred_nocs")
+        )
 
         instances = self._forward_nocs(features, instances)
         return instances
 
-
     def _forward_nocs(self, features, instances):
-        '''
-
-        '''
-        if not self.nocs_on: 
+        """ """
+        if not self.nocs_on:
             return {} if self.training else instances
         features = [features[f] for f in self.in_features]
         # assert instances[0].has("pred_nocs")
         if self.training:
 
-            target_mask, target_coords, target_class_ids, target_domain_labels, proposals_boxes\
-             = clip_for_proposal(instances, self.out_hw, self.nocs_pooler_scales, self.nocs_sampling_ratio)
-            
-            target_class_ids = torch.cat(target_class_ids)  #cat后为[128]
+            (
+                target_mask,
+                target_coords,
+                target_class_ids,
+                target_domain_labels,
+                proposals_boxes,
+            ) = clip_for_proposal(
+                instances,
+                self.out_hw,
+                self.nocs_pooler_scales,
+                self.nocs_sampling_ratio,
+            )
+
+            target_class_ids = torch.cat(target_class_ids)  # cat后为[128]
 
             target_mask = torch.cat(target_mask)
             target_coords = torch.cat(target_coords)
-            target_domain_labels = torch.cat(target_domain_labels) #  [128]
+            target_domain_labels = torch.cat(target_domain_labels)  #  [128]
             all_true = torch.ones(target_domain_labels.shape)
             all_true = all_true
-            domain_ix = all_true-target_domain_labels
+            domain_ix = all_true - target_domain_labels
             target_class_ids = torch.mul(target_class_ids, domain_ix.float())
 
-            #features :         4 * batch_size * 256 * feature_map_size *f eature_map_size
-            #proposals_boxes :  batch_size * batch_per_image(64) * 4
+            # features :         4 * batch_size * 256 * feature_map_size *f eature_map_size
+            # proposals_boxes :  batch_size * batch_per_image(64) * 4
             nocs_features = self.nocs_pooler(features, proposals_boxes)
-            #nocs_features:     (batch_size*batch_per_image(64)) * 256 * 14 * 14
+            # nocs_features:     (batch_size*batch_per_image(64)) * 256 * 14 * 14
             mrcnn_coord_x_bin, mrcnn_coord_x_feature = self.nocs_head_x(nocs_features)
             # mrcnn_coord_x_bin   ([128, 28, 28, 7, 32])
             mrcnn_coord_y_bin, mrcnn_coord_y_feature = self.nocs_head_y(nocs_features)
             mrcnn_coord_z_bin, mrcnn_coord_z_feature = self.nocs_head_z(nocs_features)
             # config.USE_SYMMETRY_LOSS:
-            mrcnn_coords_bin = torch.stack((mrcnn_coord_x_bin, mrcnn_coord_y_bin, mrcnn_coord_z_bin),dim=-1)
+            mrcnn_coords_bin = torch.stack(
+                (mrcnn_coord_x_bin, mrcnn_coord_y_bin, mrcnn_coord_z_bin), dim=-1
+            )
             # mrcnn_coords_bin: [128, 28, 28, 7, 32, 3]
 
             coord_bin_loss = mrcnn_coord_bins_symmetry_loss_graph(
-                target_mask, target_coords, target_class_ids,target_domain_labels, mrcnn_coords_bin
+                target_mask,
+                target_coords,
+                target_class_ids,
+                target_domain_labels,
+                mrcnn_coords_bin,
             )
             coord_x_bin_loss = coord_bin_loss[0]
             coord_y_bin_loss = coord_bin_loss[1]
@@ -174,44 +222,73 @@ class NOCSRCNNROIHeads(StandardROIHeads):
 
             ## convert bins to float values
             mrcnn_coord_x_shape = mrcnn_coord_x_bin.shape
-            mrcnn_coord_x_bin_reshape = mrcnn_coord_x_bin.view(-1, mrcnn_coord_x_shape[-1]) 
-            #mrcnn_coord_x_bin_reshape [702464, 32]
+            mrcnn_coord_x_bin_reshape = mrcnn_coord_x_bin.view(
+                -1, mrcnn_coord_x_shape[-1]
+            )
+            # mrcnn_coord_x_bin_reshape [702464, 32]
             mrcnn_coord_x_bin_ind = torch.argmax(mrcnn_coord_x_bin_reshape, axis=-1)
-            #mrcnn_coord_x_bin_ind [702464]
-            
+            # mrcnn_coord_x_bin_ind [702464]
+
             mrcnn_coord_x_bin_value = mrcnn_coord_x_bin_ind.float()
-            mrcnn_coord_x_bin_value = mrcnn_coord_x_bin_value.view(mrcnn_coord_x_shape[:-1])
-            #mrcnn_coord_x_bin_value  :[128, 28, 28, 7]
+            mrcnn_coord_x_bin_value = mrcnn_coord_x_bin_value.view(
+                mrcnn_coord_x_shape[:-1]
+            )
+            # mrcnn_coord_x_bin_value  :[128, 28, 28, 7]
 
             mrcnn_coord_y_shape = mrcnn_coord_y_bin.shape
-            mrcnn_coord_y_bin_reshape = mrcnn_coord_y_bin.view(-1, mrcnn_coord_y_shape[-1])
+            mrcnn_coord_y_bin_reshape = mrcnn_coord_y_bin.view(
+                -1, mrcnn_coord_y_shape[-1]
+            )
             mrcnn_coord_y_bin_ind = torch.argmax(mrcnn_coord_y_bin_reshape, axis=-1)
             mrcnn_coord_y_bin_value = mrcnn_coord_y_bin_ind.float()
-            mrcnn_coord_y_bin_value = mrcnn_coord_y_bin_value.view(mrcnn_coord_y_shape[:-1])
+            mrcnn_coord_y_bin_value = mrcnn_coord_y_bin_value.view(
+                mrcnn_coord_y_shape[:-1]
+            )
 
             mrcnn_coord_z_shape = mrcnn_coord_z_bin.shape
-            mrcnn_coord_z_bin_reshape = mrcnn_coord_z_bin.view(-1, mrcnn_coord_z_shape[-1])
+            mrcnn_coord_z_bin_reshape = mrcnn_coord_z_bin.view(
+                -1, mrcnn_coord_z_shape[-1]
+            )
             mrcnn_coord_z_bin_ind = torch.argmax(mrcnn_coord_z_bin_reshape, axis=-1)
             mrcnn_coord_z_bin_value = mrcnn_coord_z_bin_ind.float()
-            mrcnn_coord_z_bin_value = mrcnn_coord_z_bin_value.view(mrcnn_coord_z_shape[:-1])
+            mrcnn_coord_z_bin_value = mrcnn_coord_z_bin_value.view(
+                mrcnn_coord_z_shape[:-1]
+            )
 
-            ## Final loss 
-            mrcnn_coords = torch.stack((mrcnn_coord_x_bin_value, mrcnn_coord_y_bin_value, mrcnn_coord_z_bin_value), dim=-1)
+            ## Final loss
+            mrcnn_coords = torch.stack(
+                (
+                    mrcnn_coord_x_bin_value,
+                    mrcnn_coord_y_bin_value,
+                    mrcnn_coord_z_bin_value,
+                ),
+                dim=-1,
+            )
             # L1_diff metric
             # config.USE_SYMMETRY_LOSS:
             coord_diff = mrcnn_coord_symmetry_loss_graph(
-                target_mask, target_coords, target_class_ids, target_domain_labels, mrcnn_coords
+                target_mask,
+                target_coords,
+                target_class_ids,
+                target_domain_labels,
+                mrcnn_coords,
             )
             coord_l2_diff = mrcnn_coord_symmetry_euclidean_distance_graph(
-                target_mask, target_coords, target_class_ids,target_domain_labels, mrcnn_coords
+                target_mask,
+                target_coords,
+                target_class_ids,
+                target_domain_labels,
+                mrcnn_coords,
             )
-            losses = {  "coord_x_bin_loss":coord_x_bin_loss, 
-                        "coord_y_bin_loss":coord_y_bin_loss, 
-                        "coord_z_bin_loss":coord_z_bin_loss,
-                        "coord_diff_x":coord_diff[0], 
-                        "coord_diff_y":coord_diff[1], 
-                        "coord_diff_z":coord_diff[2], 
-                        "coord_l2_diff":coord_l2_diff}
+            losses = {
+                "coord_x_bin_loss": coord_x_bin_loss,
+                "coord_y_bin_loss": coord_y_bin_loss,
+                "coord_z_bin_loss": coord_z_bin_loss,
+                "coord_diff_x": coord_diff[0],
+                "coord_diff_y": coord_diff[1],
+                "coord_diff_z": coord_diff[2],
+                "coord_l2_diff": coord_l2_diff,
+            }
             return losses
         else:
             return instances

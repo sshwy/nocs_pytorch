@@ -1,11 +1,12 @@
 from detectron2.config import CfgNode as CN
 
+
 def get_nocsrcnn_cfg_defaults(cfg):
     """
     Customize the detectron2 cfg to include some new keys and default values
     for NOCS branch
     """
-    #接下来可以尽情往这里面丢有关这个NOCS分支的所有cfg
+    # 接下来可以尽情往这里面丢有关这个NOCS分支的所有cfg
 
     cfg.MODEL.NOCS_ON = False
     cfg.MODEL.VIS_MINIBATCH = False  # visualize minibatches
@@ -42,11 +43,10 @@ def get_nocsrcnn_cfg_defaults(cfg):
     cfg.MODEL.ROI_NOCS_HEAD.NORM = ""
     cfg.MODEL.ROI_NOCS_HEAD.NUM_CLASSES = 0
 
-
-    cfg.MODEL.ROI_NOCS_HEAD.USE_SYMMETRY_LOSS =1
-    cfg.MODEL.ROI_NOCS_HEAD.COORD_USE_BINS =1
-    cfg.MODEL.ROI_NOCS_HEAD.COORD_SHARE_WEIGHTS =0
-    cfg.MODEL.ROI_NOCS_HEAD.COORD_USE_DELTA =0
-    cfg.MODEL.ROI_NOCS_HEAD.COORD_REGRESS_LOSS ='Soft_L1'
+    cfg.MODEL.ROI_NOCS_HEAD.USE_SYMMETRY_LOSS = 1
+    cfg.MODEL.ROI_NOCS_HEAD.COORD_USE_BINS = 1
+    cfg.MODEL.ROI_NOCS_HEAD.COORD_SHARE_WEIGHTS = 0
+    cfg.MODEL.ROI_NOCS_HEAD.COORD_USE_DELTA = 0
+    cfg.MODEL.ROI_NOCS_HEAD.COORD_REGRESS_LOSS = "Soft_L1"
     cfg.MODEL.ROI_NOCS_HEAD.USE_BN = 1
     return cfg

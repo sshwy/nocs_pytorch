@@ -13,11 +13,13 @@ import numpy as np
 # Don't use this class directly. Instead, sub-class it and override
 # the configurations you need to change.
 
+
 class Config(object):
     """Base configuration class. For custom configurations, create a
     sub-class that inherits from this one and override properties
     that need to be changed.
     """
+
     # Name the configurations. For example, 'COCO', 'Experiment 3', ...etc.
     # Useful if your code needs to do things differently depending on which
     # experiment is running.
@@ -149,14 +151,19 @@ class Config(object):
         self.BATCH_SIZE = self.IMAGES_PER_GPU * self.GPU_COUNT
 
         # Input image size
-        self.IMAGE_SHAPE = np.array(
-            [self.IMAGE_MAX_DIM, self.IMAGE_MAX_DIM, 3])
+        self.IMAGE_SHAPE = np.array([self.IMAGE_MAX_DIM, self.IMAGE_MAX_DIM, 3])
 
         # Compute backbone size from input image size
         self.BACKBONE_SHAPES = np.array(
-            [[int(math.ceil(self.IMAGE_SHAPE[0] / stride)),
-              int(math.ceil(self.IMAGE_SHAPE[1] / stride))]
-             for stride in self.BACKBONE_STRIDES])
+            [
+                [
+                    int(math.ceil(self.IMAGE_SHAPE[0] / stride)),
+                    int(math.ceil(self.IMAGE_SHAPE[1] / stride)),
+                ]
+                for stride in self.BACKBONE_STRIDES
+            ]
+        )
+
     ''' 
     def display(self):
         """Display Configuration values."""
@@ -166,11 +173,12 @@ class Config(object):
                 print("{:30} {}".format(a, getattr(self, a)))
         print("\n")
     '''
+
     def display(self):
-        return 
+        return
 
     def log(self, output_path):
-        with open(output_path, 'w') as f:
+        with open(output_path, "w") as f:
             for a in dir(self):
                 if not a.startswith("__") and not callable(getattr(self, a)):
                     f.write("{:30} {}\n".format(a, getattr(self, a)))
