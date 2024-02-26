@@ -11,7 +11,7 @@ from detectron2.modeling.roi_heads.roi_heads import (
     StandardROIHeads,
     select_foreground_proposals,
 )
-from nocsrcnn.modeling.roi_heads.nocs_head import *
+from .nocs_head import *
 import cv2
 
 
