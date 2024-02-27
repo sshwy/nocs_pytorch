@@ -22,7 +22,6 @@ MODEL:
     IN_FEATURES: ["p2", "p3", "p4", "p5"]
     BATCH_SIZE_PER_IMAGE: 64
     NUM_CLASSES: 153
-    #NUM_CLASSES: 7
   ROI_BOX_HEAD:
     NAME: "FastRCNNConvFCHead"
     NUM_FC: 2
@@ -39,8 +38,8 @@ MODEL:
     POOLER_RESOLUTION: 14
     OUT_HW: 28 
 DATASETS:
-  TRAIN: ("my_dataset",)
-  TEST: ("my_dataset",)
+  TRAIN: ("oop_train",)
+  TEST: ("oop_test",)
 DATALOADER:
   NUM_WORKERS: 2
 SOLVER:
@@ -48,6 +47,7 @@ SOLVER:
   STEPS: (200,250)
   MAX_ITER: 300
   IMS_PER_BATCH: 1
+  CHECKPOINT_PERIOD: 2000
 INPUT:
   MIN_SIZE_TRAIN: (640, 672, 704, 736, 768, 800)
 VERSION: 2

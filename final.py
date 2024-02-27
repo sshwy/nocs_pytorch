@@ -22,6 +22,8 @@ import os
 import numpy as np
 import random
 from PIL import Image
+from detectron2.engine.defaults import default_argument_parser
+from detectron2.engine.defaults import default_setup
 import utilscopy
 from detectron2.config import configurable
 
@@ -113,16 +115,8 @@ def process_data(mask_im, coord_map, meta: ImageMetaData, image_path: str):
     class_ids = np.zeros([num_instance], dtype=np.int_)
     scales = np.zeros([num_instance, 3], dtype=np.float32)
     """
-    # print('---begin process_data-------')
-    # print('-------inst_dict:   ',inst_dict)
-    # {1: 3, 2: 1, 3: 0, 4: 1, 5: 3, 6: 1, 7: 6, 8: 0, 9: 0, 10: 0, 11: 3, 12: 6}
-    # parsing mask
     cdata = mask_im
     cdata = np.array(cdata, dtype=np.int32)
-    # cdata : 640*480 没有物体为255 有物体为物体的编号 e.g.[1,2,4,255]
-    # 用了unique的话一个图片中一个物体有多个的话会混淆？是因为做的不是语义分割所以不需要区别个体？
-    # 那bouding box的产生会有问题吗？
-    # instance ids
 
     # after random croppying, the object might be invisiable
     occur_ids = np.unique(cdata)
@@ -131,13 +125,6 @@ def process_data(mask_im, coord_map, meta: ImageMetaData, image_path: str):
     ]
     instance_ids = sorted(instance_ids)
 
-    # # remove background
-    # # assert instance_ids[-1] == 255
-    # if instance_ids[-1] == 255:
-    #     del instance_ids[-1]
-    # if instance_ids[0] == 0:
-    #     del instance_ids[0]
-    # # print('instance_ids',instance_ids)
     cdata[cdata == 255] = -1
     cdata[cdata == 0] = -1
 
@@ -150,37 +137,6 @@ def process_data(mask_im, coord_map, meta: ImageMetaData, image_path: str):
     masks = np.zeros([num_instance, h, w], dtype=np.uint8)
     coords = np.zeros((h, w, num_instance, 3), dtype=np.float32)
     class_ids = np.zeros([num_instance], dtype=np.int_)
-    scales = np.zeros([num_instance, 3], dtype=np.float32)
-
-    # # lines 为 m 行（一个图片m个物体），每行为一个物体
-    # """
-    # scale_factor = np.zeros((len(lines), 3), dtype=np.float32)
-    # OBJ_MODEL_DIR = os.path.join('/data2','qiweili', 'data', 'obj_models')
-
-    # #以下循环获得bbox三维的归一化长度
-    # for i, line in enumerate(lines):
-    #     words = line[:-1].split(' ')
-
-    #     if len(words) == 3:
-    #         ## real scanned objs
-    #         if words[2][-3:] == 'npz':
-    #             npz_path = os.path.join(OBJ_MODEL_DIR, 'real_val', words[2])
-    #             with np.load(npz_path) as npz_file:
-    #                 scale_factor[i, :] = npz_file['scale']
-    #         else:
-    #             bbox_file = os.path.join(OBJ_MODEL_DIR, 'real_'+subset, words[2]+'.txt')
-    #             scale_factor[i, :] = np.loadtxt(bbox_file)
-
-    #         scale_factor[i, :] /= np.linalg.norm(scale_factor[i, :])
-    #         #获得bbox三维的相对长度
-
-    #     else:
-    #         bbox_file = os.path.join(OBJ_MODEL_DIR, subset, words[2], words[3], 'bbox.txt')
-    #         bbox = np.loadtxt(bbox_file)
-    #         scale_factor[i, :] = bbox[0, :] - bbox[1, :]
-    #         #但是发现bbox[0, :]与bbox[1, :]是相反数
-    #         #又发现已经归一化好了
-    # """
 
     for obj in meta.objects:
         if not obj.mask_id in instance_ids:
@@ -189,44 +145,12 @@ def process_data(mask_im, coord_map, meta: ImageMetaData, image_path: str):
         inst_mask = cdata == obj.mask_id
         assert np.sum(inst_mask) > 0, f"invalid obj: {obj}, {image_path}"
         masks[i, :, :] = inst_mask
-        # 下行利用已经处理过的mask，处理coords,使得每个coords只含有一个类的物体
         coords[:, :, i, :] = np.multiply(coord_map, np.expand_dims(inst_mask, axis=-1))
 
         class_ids[i] = obj.meta.class_label
 
-    # delete ids of background objects and non-existing objects
-    # i = 0
-    # inst_id_to_be_deleted = []
-    # for inst_id in inst_dict.keys():
-    #     if inst_dict[inst_id] == 0 or (not inst_id in instance_ids):
-    #         inst_id_to_be_deleted.append(inst_id)
-    # for delete_id in inst_id_to_be_deleted:
-    #     del inst_dict[delete_id]
-    # for inst_id in instance_ids:  # instance mask is one-indexed
-    #     if not inst_id in inst_dict:
-    #         continue
-    #     inst_mask = np.equal(cdata, inst_id)
-    #     # 获得每类物体的掩码
-    #     assert np.sum(inst_mask) > 0
-    #     assert inst_dict[inst_id]
-
-    #     masks[i, :, :] = inst_mask
-    #     # 下行利用已经处理过的mask，处理coords,使得每个coords只含有一个类的物体
-    #     coords[:, :, i, :] = np.multiply(coord_map, np.expand_dims(inst_mask, axis=-1))
-
-    #     # class ids is also one-indexed
-    #     class_ids[i] = inst_dict[inst_id]
-    #     # scales[i, :] = scale_factor[inst_id - 1, :]
-    #     i += 1
-
-    # print('before: ', inst_dict)
-    # masks = masks[:i, :, :]
-    # coords = coords[:, :, :i, :]
     coords = np.clip(coords, 0, 1)
 
-    # class_ids = class_ids[:i]
-    # scales = scales[:i]
-    # print('---end process_data-------')
     return masks, coords, class_ids, None  # scales
 
 
@@ -338,9 +262,6 @@ def mapper(dataset_dict):
     # mask_before, coord_, class_ids_, scales_, domain_label_ = load_mask(dataset_dict)
 
     class_ids = class_ids - 1
-    assert min(class_ids) >= 0
-    # mask_before=mask
-    # bbox_before = extract_bboxes(mask_before)
     image = np.ascontiguousarray(image)
 
     image_after, _, scale, padding = resize_image(
@@ -493,6 +414,7 @@ class Trainer(DefaultTrainer):
 
     @classmethod
     def mytest(cls, cfg, model, dataset_name):
+        print("my test")
         # model.eval()
         loss = {}
         re = {}
@@ -507,103 +429,57 @@ class Trainer(DefaultTrainer):
                         loss[key] = loss[key] + value
             for key, value in loss.items():
                 re["val_" + key] = loss[key].item() / l
-            # print(re)
+            print(re)
         model.train()
         return re
 
 
 from nocsrcnn.modeling.roi_heads import NOCSRCNNROIHeads
 from nocsrcnn.config import get_nocsrcnn_cfg_defaults
+import register_oop as _
 
-
-if __name__ == "__main__":
-    if hasattr(torch.cuda, "empty_cache"):
-        torch.cuda.empty_cache()
+def setup(args):
+    """
+    Create configs and perform basic setups.
+    """
     cfg = get_cfg()
     cfg = get_nocsrcnn_cfg_defaults(cfg)
-    cfg.DATALOADER.ASPECT_RATIO_GROUPING = False
-    cfg.merge_from_file(
-        "configs/NOCSrcnn.yaml"
-        # "/home/qiweili/detectron2/configs/COCO-InstanceSegmentation/mask_rcnn_R_50_FPN_3x.yasml"
+    cfg.merge_from_file(args.config_file)
+    cfg.merge_from_list(args.opts)
+    cfg.freeze()
+    default_setup(cfg, args)
+    return cfg
+
+def main(args):
+    print(args, args.opts)
+    if hasattr(torch.cuda, "empty_cache"):
+        torch.cuda.empty_cache()
+    cfg = setup(args)
+
+    os.makedirs(cfg.OUTPUT_DIR, exist_ok=True)
+    trainer = Trainer(cfg)
+    model = trainer.build_model(cfg)
+    val_dataloader = build_detection_test_loader(
+        cfg, mapper=mapper, dataset_name=cfg.DATASETS.TEST
     )
-    # cfg.DATALOADER.NUM_WORKERS = 0
+    trainer.register_hooks(
+        [EvalHook(100, lambda: trainer.mytest(cfg, model, val_dataloader))]
+    )
+    trainer.resume_or_load(resume=args.resume)
+    # set_trace()
+    trainer.train()
 
-    import register_oop as _
-
-    # DatasetCatalog.register("camera_train_dataset", camera_train_function)
-    # DatasetCatalog.register("real_train_dataset", real_train_function)
-    # DatasetCatalog.register("coco_train_dataset", coco_train_function)
-    # DatasetCatalog.register("camera_val_dataset", camera_val_function)
-    # cfg.MODEL.WEIGHTS = os.path.join("/data2/qiweili/logs", "model_final_280758.pkl")
-    # cfg.MODEL.WEIGHTS=''
-    cfg.SOLVER.BASE_LR = 0.001
-    cfg.DATASETS.TRAIN = ("oop_train",)
-    cfg.DATASETS.TEST = ("oop_test",)
-
+if __name__ == "__main__":
     # os.environ['CUDA_LAUNCH_BLOCKING'] = str(1)
-    cfg.SOLVER.MAX_ITER = 400
-    cfg.SOLVER.STEPS = (200, 300)
-
-    os.makedirs(cfg.OUTPUT_DIR, exist_ok=True)
-    os.environ["CUDA_VISIBLE_DEVICES"] = "3"
-
-    cfg.OUTPUT_DIR = "output_step1"
-    os.makedirs(cfg.OUTPUT_DIR, exist_ok=True)
-    # cfg.MODEL.WEIGHTS = os.path.join("/data2/qiweili/logs", "model_final_280758.pkl")
-    cfg.MODEL.BACKBONE.FREEZE_AT = 6
-    cfg.SOLVER.MAX_ITER = 100000
-    cfg.SOLVER.STEPS = (75000, 85000)
-    print(cfg)
-    trainer = Trainer(cfg)
-    model = trainer.build_model(cfg)
-    val_dataloader = build_detection_test_loader(
-        cfg, mapper=mapper, dataset_name=cfg.DATASETS.TEST
-    )
-    trainer.register_hooks(
-        [EvalHook(30, lambda: trainer.mytest(cfg, trainer.model, val_dataloader))]
-    )
-    trainer.resume_or_load(resume=False)
-    set_trace()
-    trainer.train()
-
-    """
-    cfg.OUTPUT_DIR = "output_step2"
-    os.makedirs(cfg.OUTPUT_DIR, exist_ok=True)
-    cfg.MODEL.WEIGHTS = os.path.join(
-        "/data2/qiweili/logs/nocs_bin4/step1", "model_final.pth"
-    )
-    cfg.MODEL.BACKBONE.FREEZE_AT = 4
-    cfg.SOLVER.BASE_LR = cfg.SOLVER.BASE_LR / 10.0
-    cfg.SOLVER.MAX_ITER = 130000
-    cfg.SOLVER.STEPS = (105000, 115000)
-    trainer = Trainer(cfg)
-    model = trainer.build_model(cfg)
-    val_dataloader = build_detection_test_loader(
-        cfg, mapper=mapper, dataset_name=cfg.DATASETS.TEST
-    )
-    trainer.register_hooks(
-        [EvalHook(30, lambda: trainer.mytest(cfg, trainer.model, val_dataloader))]
-    )
-    trainer.resume_or_load(resume=False)
-    trainer.train()
-
-    cfg.OUTPUT_DIR = "output_step3"
-    os.makedirs(cfg.OUTPUT_DIR, exist_ok=True)
-    cfg.MODEL.WEIGHTS = os.path.join(
-        "/data2/qiweili/logs/nocs_bin4/step2", "model_final.pth"
-    )
-    cfg.MODEL.BACKBONE.FREEZE_AT = 2
-    cfg.SOLVER.BASE_LR = cfg.SOLVER.BASE_LR / 10.0
-    cfg.SOLVER.MAX_ITER = 400000
-    cfg.SOLVER.STEPS = (300000, 330000)
-    trainer = Trainer(cfg)
-    model = trainer.build_model(cfg)
-    val_dataloader = build_detection_test_loader(
-        cfg, mapper=mapper, dataset_name=cfg.DATASETS.TEST
-    )
-    trainer.register_hooks(
-        [EvalHook(30, lambda: trainer.mytest(cfg, trainer.model, val_dataloader))]
-    )
-    trainer.resume_or_load(resume=False)
-    trainer.train()
-    """
+    os.environ["CUDA_VISIBLE_DEVICES"] = "2,3"
+    args = default_argument_parser().parse_args()
+    print("Command Line Args:", args)
+    main(args)
+    # launch(
+    #     main,
+    #     2,
+    #     num_machines=args.num_machines,
+    #     machine_rank=args.machine_rank,
+    #     dist_url=args.dist_url,
+    #     args=(args,),
+    # )
